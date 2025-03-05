@@ -1,0 +1,617 @@
+
+' Программа сортировки файлов с датами в имени (например, фотографий)
+' по папкам с именами вида YYYYMMDD
+
+Title = "Программа сортировки файлов фото и видео по папкам v2.01 08.05.2021 © KTSoft"
+
+' 20200115 - это стандарт! - для каталогов: YYYYMMDD
+
+Ret = 0 ' универсальная возвращаемая переменная
+P1 = "" ' мусор!!!!
+P2 = ""
+P3 = ""
+P4 = ""
+
+' ----------------- Функции ----------------------
+
+' Подпрограмма проверки наличия и вывода файловой ошибки
+' P1 - папка, P2 - файл, P3 - операция, P4 - ошибка - нужна не всегда!
+Sub Err
+    If P4 = "" Then ' если ошибка не передана
+        P4 = File.LastError ' получаем код файловой ошибки
+        If P4 = "" Then ' если и этой ошибки не было
+            Goto errfin ' выходим из подпрограммы
+        EndIf
+    EndIf ' если есть ошибка
+    TextWindow.ForegroundColor = "darkred" ' вывести всю информацию об ошибке
+    TextWindow.WriteLine("*** " + P4 + " ***") ' вывод ошибки
+    TextWindow.ForegroundColor = "black"
+    If P3 <> "" Then
+        TextWindow.WriteLine("Операция: " + P3)
+    EndIf
+    If P1 <> "" Then
+        TextWindow.WriteLine("Папка: " + P1)
+    EndIf
+    If P2 <> "" Then
+        TextWindow.WriteLine("Файл: " + P2)
+    EndIf
+    'TextWindow.ForegroundColor = "gray"
+    TextWindow.Pause() ' при возникновении ошибки - остановиться!
+    Program.End() ' завершить работу
+    errfin:
+EndSub
+'________________________________________________________________________
+
+' Подпрограмма чтения / создания файла конфигурации
+Sub Config
+    If Program.ArgumentCount = 1 Then ' найти файл в текущем каталоге
+        Cpath = Program.GetArgument(1)
+    Else
+        Cpath = Program.Directory ' будем искать в папке программы
+    EndIf
+    Cpath = Cpath + "\settings.txt"
+    str = File.ReadLine(Cpath,1)
+    P3 = "Чтение настроек"
+    P2 = Cpath
+    Err()
+    If str = "" Then ' нет конфигурационного файла в той папке, которая будет обрабатываться
+        Cpath = Program.Directory ' ищем файл в папке с программой
+        Cpath = Cpath + "\settings.txt"
+        str = File.ReadLine(Cpath,1)
+        P3 = "Чтение настроек"
+        P2 = Cpath
+        Err()
+        If str = "" Then ' нет конфигурационного файла вообще!!!
+            P4 = File.WriteLine(Cpath,1,"extensions:")
+            If P4 = "FAILED" Then
+                P2 = Cpath
+                P3 = "Создание файла настроек"
+                Err()
+            EndIf
+            File.WriteLine(Cpath,2,"jpg")
+            File.WriteLine(Cpath,3,"dateformats:")
+            File.WriteLine(Cpath,4,"yyyymmdd")
+            P4 = File.WriteLine(Cpath,5,".")
+            If P4 = "FAILED" Then
+                P2 = Cpath
+                P3 = "Создание файла настроек"
+                Err()
+            EndIf
+            File.WriteLine(Cpath,6,"")
+            File.WriteLine(Cpath,7,"*** Файл настроек программы сортировки файлов по датам. ***")
+            File.WriteLine(Cpath,8,"")
+            File.WriteLine(Cpath,9,"Файл настроек может находиться в папке программы и/или в обрабатываемой папке, но первым используется тот, что находится в обрабатываемой папке.")
+            File.WriteLine(Cpath,10,"Пробелы (если они не часть формата даты) и пустые строки до точки - не допускаются!")
+            File.WriteLine(Cpath,11,"Раздел extensions содержит список расширений файлов - по 1-му в строке.")
+            File.WriteLine(Cpath,12,"Расширения - только в нижнем регистре! Без точек!")
+            File.WriteLine(Cpath,13,"Раздел dateformats содержит форматы дат - по 1-му в строке.")
+            File.WriteLine(Cpath,14,"Форматы дат - в нижнем регистре! 'y' - одна цифра года (всего 4), 'm' - одна цифра месяца (всего 2), 'd' - одна цифра даты (всего 2), '?' - любой символ, любой другой символ - должен присутствовать в имени файла.")
+            P4 = File.WriteLine(Cpath,15,"В конце списка настроек должна быть строка, содержащая одну точку. ")
+            If P4 = "FAILED" Then
+                P2 = Cpath
+                P3 = "Создание файла настроек"
+                Err()
+            EndIf
+            TextWindow.ForegroundColor = "darkred"
+            TextWindow.WriteLine("*** Файл настроек не найден! ***")
+            TextWindow.ForegroundColor = "black"
+            TextWindow.WriteLine("Создан новый файл настроек: " + Cpath)
+            'TextWindow.ForegroundColor = "gray"
+        EndIf
+    EndIf
+    ' Теперь файл настроек точно существует - в папке программы
+    ' Читаем файл настроек
+    i = 1 ' номер строки в файле
+    str = File.ReadLine(Cpath,i)
+    If str <> "extensions:" Then
+        P2 = Cpath
+        P3 = "Чтение файла настроек"
+        P4 = "Неверный формат файла" ' хотя может быть он есть, но просто не читается!
+        Err()
+    EndIf
+    i = 2
+    While File.ReadLine(Cpath,i) <> "dateformats:"
+        If File.ReadLine(Cpath,i) = "" Then
+            P2 = Cpath
+            P3 = "Чтение файла настроек"
+            P4 = "Неверный формат файла"
+            Err()
+        EndIf
+        ext[i-1] = File.ReadLine(Cpath,i) ' ext - массив расширений!
+        i = i + 1
+    EndWhile
+    If i = 2 Then ' если не считано ни одной строки расширений
+        P2 = Cpath
+        P3 = "Чтение файла настроек"
+        P4 = "Неверный формат файла"
+        Err()
+    EndIf
+    i = i + 1
+    k = 1
+    While File.ReadLine(Cpath,i) <> "." ' Теперь читаем форматы дат
+        If File.ReadLine(Cpath,i) = "" Then
+            P2 = Cpath
+            P3 = "Чтение файла настроек"
+            P4 = "Неверный формат файла"
+            Err()
+        EndIf
+        dat[k] = File.ReadLine(Cpath,i) ' dat - массив форматов даты
+        k = k + 1
+        i = i + 1
+    EndWhile
+    If k = 1 Then ' если не считано ни одной строки форматов даты
+        P2 = Cpath
+        P3 = "Чтение файла настроек"
+        P4 = "Неверный формат файла"
+        Err()
+    EndIf
+EndSub
+'________________________________________________________________________
+
+' Проверяет, является ли параметр P1 символом - цифрой
+' параметр P1 - символ (если цифра - Ret = 1, иначе =0)
+Sub IsDig
+    If P1="0" Or P1="1" Or P1="2" Or P1="3" Or P1="4" Or P1="5" Or P1="6" Or P1="7" Or P1="8" Or P1="9" Then ' проверка на совпадение с цифрой
+        Ret = 1 ' если P1 цифра - возвращаем 1
+    Else
+        Ret = 0 ' если P1 не цифра - возвращаем 0
+    EndIf
+EndSub
+'________________________________________________________________________
+
+' Перевод символа-цифры в однозначное число
+' параметр P1 - символ-цифра, Ret = числовому значению символа-цифры, а если ошибка => Ret > 10
+Sub ToDig
+    If P1="0" Then
+        Ret = 0
+    ElseIf P1="1" Then
+        Ret = 1
+    ElseIf P1="2" Then
+        Ret = 2
+    ElseIf P1="3" Then
+        Ret = 3
+    ElseIf P1="4" Then
+        Ret = 4
+    ElseIf P1="5" Then
+        Ret = 5
+    ElseIf P1="6" Then
+        Ret = 6
+    ElseIf P1="7" Then
+        Ret = 7
+    ElseIf P1="8" Then
+        Ret = 8
+    ElseIf P1="9" Then
+        Ret = 9
+    Else ' Ошибка!!!
+        Ret = 13
+    EndIf
+EndSub
+'____________________________________________________________
+
+' Перевод строки цифр в целое положительное число (P1 - строка цифр, Ret - число)
+Sub StrToNum
+    stk = "" ' стек в начальном состоянии
+    slen = Text.GetLength(P1)
+    For i = 1 To slen ' цикл от 1 до длинны строки
+        Stack.PushValue(stk,Text.GetSubText(P1,i,1))' считываем символ из строки и записываем в стек
+    EndFor
+    num = 0
+    For i = 1 To slen ' цикл i = от 1 до длинны строки (перменная)
+        P1 = Stack.PopValue(stk) ' берём из стека символ
+        IsDig()
+        If Ret = 0 Then
+            P3 = "Преобразование символа " + P1 + " в число"
+            P4 = "Ошибка!"
+            Err()
+        EndIf
+        ToDig() ' превращаяем символ в число (функция)
+        If Ret > 9 Then
+            P3 = "Преобразование символа " + P1 + " в число"
+            P4 = "Ошибка!"
+            Err()
+        EndIf
+        num = num + Ret * Math.Power(10,i-1)' сложить значение разряда с числом
+    EndFor
+    Ret = num
+EndSub
+'____________________________________________________________
+
+' Сравнение расширения файла (P1 - имя файла с расширением, P2 - расширение для сравнения, Ret = 1 если совпало, 0 - если нет)
+Sub ExtComp
+    Text.ConvertToLowerCase(P1) ' переводим имя файла в нижний регистр
+    l = Text.GetLength(P1) ' получаем длину имени файла
+    p = 0 ' позиция точки
+    For k = 1 To l ' позиция курсора в имени файла
+        c = Text.GetSubText(P1,k,1) ' читаем один символ из имени файла
+        If c = "." Then ' найти позицию последней точки в имени файла
+            p = k ' записываем позицию точки
+        EndIf
+    EndFor
+    If p = 0 Then ' точек не было!
+        Ret = 0 ' Oшибка! Файл без расширения!!! Значит не подходит
+        Goto extcompend
+    EndIf
+    If Text.GetSubTextToEnd(P1,p+1) = P2 Then ' читаем расширение и сравниваем
+        Ret = 1 ' совпало - подходит
+    Else
+        Ret = 0 ' не совпало - не подходит
+    EndIf
+    extcompend:
+EndSub
+'________________________________________________________________________
+
+' Получение и проверка даты из имени файла по шаблону (P1 - имя файла, P2 - шаблон даты, Ret = "строка даты" в стандартном формате,
+' если нет - Ret = пустая строка)
+Sub Fdate
+    fYear = "" ' строка года
+    fMonth = "" ' строка месяца
+    fDay = "" ' строка дня
+    fn = P1
+    For ik = 1 To Text.GetLength(P2) ' цикл по символам от 1 до длины шаблона (ik - курсор в шаблоне и в имени файла)
+        fc = Text.GetSubText(fn,ik,1)' считали 1 символ из имени файла
+        dc = Text.GetSubText(P2,ik,1) ' считали 1 символ из шаблона
+        If dc = "y" Then ' если "y" - симол года
+            P1 = fc
+            IsDig() ' проверяем на цифру
+            If Ret = 0 Then
+                Ret = ""
+                Goto mistake ' если не цифра - выход!
+            Else
+                fYear = Text.Append(fYear,fc) ' дописываем к fYear
+            EndIf
+        ElseIf dc = "m" Then ' если "m" - символ месяца
+            P1 = fc
+            IsDig() ' проверяем на цифру
+            If Ret = 0 Then
+                Ret = ""
+                Goto mistake ' если не цифра - выход!
+            Else
+                fMonth = Text.Append(fMonth,fc) ' дописываем к fMonth
+            EndIf
+        ElseIf dc = "d" Then ' если "d" - символ дня
+            P1 = fc
+            IsDig() ' проверяем на цифру
+            If Ret = 0 Then
+                Ret = ""
+                Goto mistake ' если не цифра - выход!
+            Else
+                fDay = Text.Append(fDay,fc) ' дописываем к fDay
+            EndIf
+        ElseIf dc = "?" Then ' если "?" - любой символ
+            ' просто пропуск
+        ElseIf dc = "*" Or dc = "\" Or dc = ":" Or dc = "/" Then ' если недопустимый символ
+            P3 = Cpath
+            P4 = "Ошибка в файле конфигурации! Недопустимый символ: " + dc
+            Err()
+        Else ' если любой другой символ
+            If dc <> fc Then ' должен быть равен символу из имени файла
+                Ret = ""
+                Goto mistake ' если не совпали - выход!
+            EndIf
+        EndIf
+    EndFor
+    ' Если шаблон совпал - проверяем даты!
+    P1 = fYear
+    StrToNum()
+    If Ret > Clock.Year Or Ret < 2000 Then ' год - не 2000-текущий
+        Ret = ""
+        Goto mistake ' выход!
+    EndIf
+    
+    P1 = fMonth
+    StrToNum()
+    If Ret < 1 Or Ret > 12 Then ' месяц - не 01-12
+        Ret = ""
+        Goto mistake ' выход!
+    EndIf
+    
+    P1 = fDay
+    StrToNum()
+    If Ret < 1 Or Ret > 31 Then ' дата - не 01 - 31
+        Ret = ""
+        Goto mistake ' выход!
+    EndIf
+    
+    ' Если даты - в пределах
+    Ret = Text.Append(fYear,fMonth) ' формируем строку даты --> Ret Text.Append
+    Ret = Text.Append(Ret,fDay)
+    
+    mistake: ' выход!
+EndSub
+'________________________________________________________________________
+
+' Подпрограмма проверки наличия файла в папке
+Sub FilInDir ' P1 - имя файла без пути, P2 - полное имя папки, Ret = 1, если файл присутствует, 0 - если нет.
+    Ret = 0
+    P2 = P2 + "\" ' добавили к имени папки "\"
+    myfils = File.GetFiles(P2) ' получить массив имен файлов папки
+    For myi = 1 To Array.GetItemCount(myfils) 'в цикле по всем именам (получили размер массива)
+        If P1 = Text.GetSubTextToEnd(myfils[myi],Text.GetLength(P2) + 1) Then ' Сравниваем имена файлов (отрезаем путь и получаем только имя файла)
+            Ret = 1
+        EndIf
+    EndFor' конец цикла
+EndSub
+'________________________________________________________________________
+
+' Подпрограмма вывода прогресс-полоски
+Sub ProgressBar ' Параметры: P2 - Y координата строки (от верха экрана), P1 - процент заполнения (считается вне функции!)
+    
+    ' процент = 100*nnf/nfils - считаем в самой программе!!!
+    
+    per = "" ' строка вывода
+    For ipb = 1 To 24
+        per = per + " " ' пишем в строку вывода начальные 24 пробела
+    EndFor
+    
+    pl = Math.Round(P1/2) ' длинна полоски в символах
+    
+    P1 = Math.Round(P1) ' округляем процент заполнения для вывода
+    
+    If P1 <= 9 Then
+        per = per + " "
+        per = Text.Append(per,P1)
+    ElseIf P1 > 9 And P1 < 100 Then
+        per = per + " "
+        per = Text.Append(per,P1)
+    Else
+        per = Text.Append(per,P1)
+    EndIf
+    per = Text.Append(per,"%") ' дописали знак процента
+    
+    For ipb = 1 To 22
+        per = per + " " ' пишем в строку вывода начальные 22 пробела
+    EndFor
+    
+    TextWindow.ForegroundColor = "yellow" ' процент - белый или желтый
+    TextWindow.CursorTop = P2 ' ставим курсор в нужную строку
+    TextWindow.CursorLeft = 15 ' ставим курсор в начало полоски
+    
+    For ipb = 1 To 50
+        TextWindow.BackgroundColor = "Black" ' цвет незаполненной полоски
+        If ipb <= pl Then
+            TextWindow.BackgroundColor = "Blue"
+        EndIf
+        TextWindow.Write(Text.GetSubText(per,ipb,1)) ' выводим
+    EndFor
+EndSub
+'________________________________________________________________________
+
+' Стирание прогресс-полоски (затираем строку пробелами цвета фона и ставим курсор в начало строки)
+Sub ClearPB ' Параметры: P2 - Y координата строки (от верха экрана)
+    TextWindow.BackgroundColor = "Gray"
+    TextWindow.ForegroundColor = "Black"
+    TextWindow.CursorTop = P2 ' ставим курсор в нужную строку
+    TextWindow.CursorLeft = 0 ' ставим курсор в начало строки
+    For cpbi = 1 To 78
+        TextWindow.Write(" ") ' забиваем строку пробелами
+    EndFor
+    TextWindow.CursorLeft = 0 ' ставим курсор в начало строки
+EndSub
+'________________________________________________________________________
+
+' Функция записи числа в массив посимвольно
+Sub ItoA ' P1 - число, Ret - массив
+    ' берем число и раскладываем его по цифрам в массив, дробную часть - тоже.
+    P1 = Text.Append("",P1)
+    For iia = 1 To Text.GetLength(P1)
+        Ret[iia] = Text.GetSubText(P1,iia,1)
+    EndFor
+EndSub
+'________________________________________________________________________
+'**************************************************************************************************
+
+' -------------------------------------------------- Программа -------------------------------------------------------
+TextWindow.Title = Title
+TextWindow.BackgroundColor = "gray"
+TextWindow.Clear()
+TextWindow.ForegroundColor = "black"
+TextWindow.WriteLine(Title)
+'TextWindow.ForegroundColor = "gray"
+TextWindow.WriteLine("")
+
+If Program.ArgumentCount = 1 Then ' Обработка текущего или заданного каталога
+    path = Program.GetArgument(1)
+    TextWindow.Write("Задана ")
+ElseIf Program.ArgumentCount = 0 Then
+    path = Program.Directory
+    TextWindow.Write("Текущая ")
+Else
+    P4 = "Неверное количество параметров программы"
+    P3 = "Формат запуска программы: PhotoDir.exe имя_папки"
+    Err()
+EndIf
+
+TextWindow.Title = Title + " " + path
+
+path = path + "\" ' добавили к пути "\"
+
+TextWindow.WriteLine("папка: " + path)
+TextWindow.WriteLine("")
+
+Config() ' считываем файл конфигурации
+
+TextWindow.WriteLine("Расширения: ") 'вывести данные по расширениям и форматам даты!!!
+For i = 1 To Array.GetItemCount(ext)
+    TextWindow.WriteLine(" " + ext[i])
+EndFor
+TextWindow.WriteLine("Форматы дат: ")
+For i = 1 To Array.GetItemCount(dat)
+    TextWindow.WriteLine(" " + dat[i])
+EndFor
+
+TextWindow.WriteLine("")
+
+TextWindow.ForegroundColor = "black"
+TextWindow.Write("Будем обрабатывать эту папку с такими настройками? (Y/N): ") ' запросили, будем ли делать что-то
+ans = TextWindow.Read()
+TextWindow.WriteLine("")
+If ans <> "y" And ans <> "Y" Then
+    TextWindow.ForegroundColor = "darkcyan"
+    TextWindow.WriteLine("")
+    TextWindow.WriteLine(" Программа позволяет раскладывать файлы, содержащие в имени дату создания")
+    TextWindow.WriteLine(" (например, фотографии), по создаваемым папкам с именами, соответствующими")
+    TextWindow.WriteLine(" календарным датам формата 'ГГГГММДД'. Программа работает в пределах папки,")
+    TextWindow.WriteLine(" указанной в передаваемых параметрах. Папку для обработки можно задать,")
+    TextWindow.WriteLine(" например, перетащив ее мышкой на файл программы.")
+    TextWindow.ForegroundColor = "black"
+    TextWindow.WriteLine("")
+    TextWindow.WriteLine("Программа завершена.")
+    TextWindow.Pause()
+    Program.End()
+EndIf
+
+fils = File.GetFiles(path) ' Получить список файлов
+If fils = "FAILED" Then
+    P1 = path
+    P3 = "Получение списка файлов"
+    P4 = "Ошибка"
+    Err()
+EndIf
+nfils = Array.GetItemCount(fils)
+TextWindow.WriteLine("Количество файлов - " + nfils + ".")
+
+ProgressY = TextWindow.CursorTop + 1
+
+nnf = 0 ' количество обработанных файлов
+opfl = 1 ' флаг наличия файловой операции
+While opfl = 1 ' повторять до того, как флаг операции после прохода не станет = 0
+    opfl = 0 ' флаг операции = 0
+    
+    fils = File.GetFiles(path) ' Получить список файлов
+    If fils = "FAILED" Then
+        P1 = path
+        P3 = "Получение списка файлов"
+        P4 = "Ошибка"
+        Err()
+    EndIf
+    
+    dirs = File.GetDirectories(path) ' Получить список подпапок
+    If dirs = "FAILED" Then
+        P1 = path
+        P3 = "Получение списка подпапок"
+        P4 = "Ошибка"
+        Err()
+    EndIf
+    
+    For fi = 1 To Array.GetItemCount(fils) ' цикл по файлам
+        tfl = 0 ' флаг проверки ставим в 0
+        fils[fi] = Text.GetSubTextToEnd(fils[fi],Text.GetLength(path) + 1) ' отрезаем путь и получаем только имя файла
+        
+        P1 = fils[fi]
+        For i = 1 To Array.GetItemCount(ext) ' цикл по шаблонам расширений
+            P2 = ext[i] ' ext - массив расширений
+            ExtComp() ' проверяем расширение - на совпадение с расширениями из файла настроек
+            If Ret = 1 Then ' файл - тот, что нам нужен (по расширению)
+                tfl = 1' флаг проверки ставим в 1 и выходим из цикла
+                Goto testdate
+            EndIf
+        EndFor
+        
+        testdate:
+        Ret = ""
+        If tfl = 1 Then ' если флаг проверки = 1 - проверяем дальше - по шаблонам
+            For di = 1 To Array.GetItemCount(dat) ' цикл по шаблонам форматов дат
+                P2 = dat[di]
+                Fdate() ' получаем запись даты из имени файла
+                If Ret = "" Then' если пустая строка - шаблон не подошел
+                    P1 = fils[fi] ' перейти к следующему шаблону
+                Else
+                    Goto testdir ' получили дату - и выходим из цикла
+                EndIf
+            EndFor ' конец цикла по шаблонам
+        EndIf
+        
+        testdir:
+        If Ret <> "" Then ' Если есть дата
+            For i = 1 To Array.GetItemCount(dirs) ' цикл по именам подпапок - ищем совпадения
+                If Ret = Text.GetSubTextToEnd(dirs[i],Text.GetLength(path) + 1) Then ' отрезаем путь и получаем только имя папки и сравниваем
+                    P1 = fils[fi]
+                    P2 = dirs[i]
+                    FilInDir() ' проверяем наличие такого же файла в папке
+                    If Ret = 1 Then ' файл в папке уже есть!
+                        P4 = "Файл уже существует в папке назначения"
+                        P1 = dirs[i]
+                        P2 = fils[fi]
+                        P3 = "Копирование файла"
+                        Err()
+                    EndIf
+                    fnnn = fils[fi]
+                    fils[fi] = path + fils[fi] ' файл - fils[fi] ' снова добавляем к нему полный путь
+                    'e = File.CopyFile(fils[fi],dirs[i]) ' тогда копируем файл в существующию папку
+                    e = LDFile.RenameFile(fils[fi],dirs[i] + "\" + fnnn) ' тогда перемещаем файл в существующию папку
+                    If e = "FAILED" Then
+                        P1 = dirs[i]
+                        P2 = fils[fi]
+                        P3 = "Копирование файла"
+                        P4 = "Ошибка"
+                        Err()
+                    EndIf
+                    'TextWindow.WriteLine("Копируем " + fils[fi] + " в " + dirs[i])
+                    'e = File.DeleteFile(fils[fi]) ' удаляем файл, который скопировали
+                    'If e = "FAILED" Then
+                    'P2 = fils[fi]
+                    'P3 = "Удаление файла"
+                    'P4 = "Ошибка"
+                    'Err()
+                    'EndIf
+                    'TextWindow.WriteLine("Удаляем " + fils[fi])
+                    nnf = nnf + 1 ' увеличиваем счетчик обработанных файлов
+                    opfl = 1 ' операция выполнена
+                    Goto povtor ' переходим к следующему повтору
+                EndIf
+            EndFor ' конец цикла по именам подпапок
+            
+            If opfl = 0 Then ' если после проверки всех подпапок совпадений нет
+                e = File.CreateDirectory(path + Ret) ' создаём новую папку
+                If e = "FAILED" Then
+                    P1 = path + Ret
+                    P3 = "Создание папки"
+                    P4 = "Ошибка"
+                    Err()
+                EndIf
+                'TextWindow.WriteLine("Создаем " + path + Ret)
+                fnnn = fils[fi]
+                fils[fi] = path + fils[fi] ' файл - fils[fi] ' снова добавляем к нему полный путь
+                e = LDFile.RenameFile(fils[fi],path + Ret + "\" + fnnn) ' перемещаем туда файл
+                'e = File.CopyFile(fils[fi],path + Ret) ' копируем туда файл
+                If e = "FAILED" Then
+                    P1 = path + Ret
+                    P2 = fils[fi]
+                    P3 = "Копирование файла"
+                    P4 = "Ошибка"
+                    Err()
+                EndIf
+                'TextWindow.WriteLine("Копируем " + fils[fi] + " в " + path + Ret)
+                'e = File.DeleteFile(fils[fi])
+                'If e = "FAILED" Then
+                ' P2 = fils[fi]
+                ' P3 = "Удаление файла"
+                ' P4 = "Ошибка"
+                ' Err()
+                'EndIf
+                'TextWindow.WriteLine("Удаляем " + fils[fi])
+                nnf = nnf + 1' увеличиваем счетчик обработанных файлов
+                opfl = 1 ' операция выполнена
+                
+                P1 = 100*nnf/nfils ' процент = 100*nnf/nfils - считаем
+                P2 = ProgressY
+                ProgressBar()
+                
+                Goto povtor ' переходим к следующему повтору
+            EndIf
+        EndIf
+    EndFor' Конец цикла по файлам
+    opfl = 0
+    povtor:
+EndWhile ' Конец цикла повтора
+
+P2 = ProgressY
+ClearPB()
+
+TextWindow.WriteLine("Файлов обработано - " + nnf + ".")
+'TextWindow.ForegroundColor = "gray"
+TextWindow.WriteLine("")
+TextWindow.WriteLine("Работа программы успешно завершена.")
+TextWindow.Write("Нажмите любую клавишу для продолжения... / ")
+TextWindow.Pause()
+Program.End()
