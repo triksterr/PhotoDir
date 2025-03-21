@@ -24,6 +24,7 @@ Photo Directories - Sorter for You photos
 
 Теперь при открытии контекстного меню папки правой кнопкой мыши выберите `Отправить - PhotoDir`. Программа запустится в выбранной папке.
 
+**Для работы программы необходимо установить [Microsoft .NET Framework](https://dotnet.microsoft.com/ru-ru/download/dotnet-framework)**
 
 Пример файла настроек "settings.txt":
 
